@@ -22,6 +22,9 @@ use wasmer_vm::libcalls::LibCall;
 /// Symbol exported from the dynamic library which points to the trampoline table.
 pub const WASMER_TRAMPOLINES_SYMBOL: &[u8] = b"WASMER_TRAMPOLINES";
 
+/// Internal symbol with local scope that can't be preempted by external symbols.
+const WASMER_TRAMPOLINES_SYMBOL_INTERNAL: &[u8] = b"WASMER_TRAMPOLINES_INTERNAL";
+
 // SystemV says that both x16 and x17 are available as intra-procedural scratch
 // registers but Apple's ABI restricts us to use x17.
 // ADRP x17, #...        11 00 00 90
@@ -47,7 +50,7 @@ fn emit_trampoline(
         value: 0,
         size: 0,
         kind: SymbolKind::Text,
-        scope: SymbolScope::Linkage,
+        scope: SymbolScope::Compilation,
         weak: false,
         section: SymbolSection::Section(text),
         flags: SymbolFlags::None,
@@ -72,7 +75,6 @@ fn emit_trampoline(
                 ),
                 _ => panic!("Unsupported binary format on AArch64"),
             };
-            assert_eq!(target.triple().binary_format, BinaryFormat::Elf);
             let offset = obj.add_symbol_data(libcall_symbol, text, &AARCH64_TRAMPOLINE, 4);
             obj.add_relocation(
                 text,
@@ -125,8 +127,27 @@ pub fn emit_trampolines(obj: &mut Object, target: &Target) {
     let text = obj.section_id(StandardSection::Text);
     let bss = obj.section_id(StandardSection::UninitializedData);
 
+    // We need to create 2 symbols here:
+    // - one with local scope that the trampolines point to.
+    // - one with global scope that is exported from the dynamic library.
+    //
+    // This is necessary because we can't point to a global scope symbol with
+    // non-GOT relocations.
     let trampoline_table = obj.add_symbol(Symbol {
         name: WASMER_TRAMPOLINES_SYMBOL.to_vec(),
+        value: 0,
+        size: 0,
+        kind: SymbolKind::Data,
+        scope: SymbolScope::Dynamic,
+        weak: false,
+        section: SymbolSection::Section(bss),
+        flags: SymbolFlags::None,
+    });
+    obj.add_symbol_bss(trampoline_table, bss, LibCall::VARIANT_COUNT as u64 * 8, 8);
+
+    // Make an internal alias of WASMER_TRAMPOLINES_SYMBOL.
+    let trampoline_table_internal = obj.add_symbol(Symbol {
+        name: WASMER_TRAMPOLINES_SYMBOL_INTERNAL.to_vec(),
         value: 0,
         size: 0,
         kind: SymbolKind::Data,
@@ -135,10 +156,11 @@ pub fn emit_trampolines(obj: &mut Object, target: &Target) {
         section: SymbolSection::Section(bss),
         flags: SymbolFlags::None,
     });
-    obj.add_symbol_bss(trampoline_table, bss, LibCall::VARIANT_COUNT as u64 * 8, 8);
+    let &Symbol { value, size, .. } = obj.symbol(trampoline_table);
+    obj.set_symbol_data(trampoline_table_internal, text, value, size);
 
     for libcall in LibCall::into_enum_iter() {
-        emit_trampoline(obj, text, trampoline_table, libcall, target);
+        emit_trampoline(obj, text, trampoline_table_internal, libcall, target);
     }
 }
 
