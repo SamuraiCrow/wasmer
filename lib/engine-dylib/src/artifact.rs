@@ -3,7 +3,7 @@
 
 use crate::engine::{DylibEngine, DylibEngineInner};
 use crate::serialize::ModuleMetadata;
-use crate::trampoline::{fill_trampoline_table, WASMER_TRAMPOLINES_SYMBOL};
+use crate::trampoline::{emit_trampolines, fill_trampoline_table, WASMER_TRAMPOLINES_SYMBOL};
 use enumset::EnumSet;
 use libloading::{Library, Symbol as LibrarySymbol};
 use loupe::MemoryUsage;
@@ -176,8 +176,6 @@ impl DylibArtifact {
         data: &[u8],
         tunables: &dyn Tunables,
     ) -> Result<Self, CompileError> {
-        use crate::trampoline::emit_trampolines;
-
         let mut engine_inner = engine.inner_mut();
         let target = engine.target();
         let compiler = engine_inner.compiler()?;

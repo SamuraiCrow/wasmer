@@ -130,7 +130,7 @@ pub fn emit_trampolines(obj: &mut Object, target: &Target) {
         value: 0,
         size: 0,
         kind: SymbolKind::Data,
-        scope: SymbolScope::Dynamic,
+        scope: SymbolScope::Compilation,
         weak: false,
         section: SymbolSection::Section(bss),
         flags: SymbolFlags::None,

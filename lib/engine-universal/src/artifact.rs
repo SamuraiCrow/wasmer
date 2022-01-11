@@ -6,7 +6,7 @@ use crate::link::link_module;
 #[cfg(feature = "compiler")]
 use crate::serialize::SerializableCompilation;
 use crate::serialize::SerializableModule;
-use crate::trampoline::make_libcall_trampolines;
+use crate::trampoline::{libcall_trampoline_len, make_libcall_trampolines};
 use enumset::EnumSet;
 use loupe::MemoryUsage;
 use std::sync::{Arc, Mutex};
@@ -61,8 +61,6 @@ impl UniversalArtifact {
         data: &[u8],
         tunables: &dyn Tunables,
     ) -> Result<Self, CompileError> {
-        use crate::trampoline::libcall_trampoline_len;
-
         let environ = ModuleEnvironment::new();
         let mut inner_engine = engine.inner_mut();
         let features = inner_engine.features();
