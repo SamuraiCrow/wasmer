@@ -95,7 +95,17 @@ cfg_if::cfg_if! {
             (stackaddr as usize - stacksize, stacksize)
         }
 
-        #[cfg(not(target_vendor = "apple"))]
+		#[cfg(target_os = "haiku")]
+		unsafe fn thread_stack() -> (usize, usize) {
+			let mut info: libc::thread_info = mem::zeroed();
+			if libc::get_thread_info(0, &mut info) < libc::B_OK {
+				panic!("unknown thread");
+			} else {
+				(info.stack_base as usize, info.stack_end as usize - info.stack_base as usize)
+			}
+		}
+
+        #[cfg(not(any(target_vendor = "apple", target_os = "haiku")))]
         unsafe fn thread_stack() -> (usize, usize) {
             let this_thread = libc::pthread_self();
             let mut thread_attrs: libc::pthread_attr_t = mem::zeroed();
@@ -288,6 +298,9 @@ cfg_if::cfg_if! {
 
                     let cx = &*(cx as *const ucontext_t);
                     cx.uc_mcontext.mc_gpregs.gp_elr as *const u8
+                } else if #[cfg(all(target_os = "haiku", target_arch = "x86_64"))] {
+                	let cx = &*(cx as *const libc::ucontext_t);
+                    cx.uc_mcontext.rip as *const u8
                 } else {
                     compile_error!("unsupported platform");
                 }
@@ -899,7 +912,7 @@ mod tls {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(any(not(unix), target_os = "haiku"))]
 pub fn lazy_per_thread_init() -> Result<(), Trap> {
     // Unused on Windows
     Ok(())
@@ -911,7 +924,7 @@ pub fn lazy_per_thread_init() -> Result<(), Trap> {
 /// always large enough for our signal handling code. Override it by creating
 /// and registering our own alternate stack that is large enough and has a guard
 /// page.
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "haiku")))]
 pub fn lazy_per_thread_init() -> Result<(), Trap> {
     use std::cell::RefCell;
     use std::ptr::null_mut;
